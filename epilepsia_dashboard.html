@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitor de Crisis — EpiWatch</title>
+
+<!-- MQTT.js via CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.4/mqtt.min.js"></script>
+
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg:        #0b0f1a;
+    --surface:   #111827;
+    --surface2:  #1a2235;
+    --border:    #1f2d45;
+    --text:      #e2e8f0;
+    --muted:     #64748b;
+    --mono:      'Space Mono', monospace;
+    --sans:      'DM Sans', sans-serif;
+
+    --normal:    #22d3a0;
+    --monitor:   #f59e0b;
+    --crisis:    #ef4444;
+    --info:      #38bdf8;
+
+    --normal-bg:  rgba(34,211,160,0.08);
+    --monitor-bg: rgba(245,158,11,0.08);
+    --crisis-bg:  rgba(239,68,68,0.10);
+    --info-bg:    rgba(56,189,248,0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .logo {
+    font-family: var(--mono);
+    font-size: 1.1rem;
+    color: var(--info);
+    letter-spacing: 0.08em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--info);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity:1; transform:scale(1); }
+    50%      { opacity:.4; transform:scale(1.3); }
+  }
+  .conn-status {
+    font-family: var(--mono);
+    font-size: .75rem;
+    padding: 5px 12px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    transition: all .3s;
+  }
+  .conn-status.connected   { color: var(--normal); border-color: var(--normal); background: var(--normal-bg); }
+  .conn-status.disconnected{ color: var(--crisis); border-color: var(--crisis); background: var(--crisis-bg); }
+  .conn-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* ── MAIN LAYOUT ── */
+  main {
+    flex: 1;
+    padding: 28px 32px;
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 20px;
+    max-width: 1300px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  /* ── STATUS CARD (spans full left column) ── */
+  .status-card {
+    grid-row: 1 / 3;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: .65rem;
+    letter-spacing: .12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  /* Estado principal */
+  .estado-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 24px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    transition: all .4s ease;
+  }
+  .estado-badge.normal   { border-color: var(--normal); background: var(--normal-bg); }
+  .estado-badge.monitoreo{ border-color: var(--monitor); background: var(--monitor-bg); }
+  .estado-badge.crisis   { border-color: var(--crisis);  background: var(--crisis-bg);  animation: flash .6s infinite; }
+  .estado-badge.iniciando{ border-color: var(--info);    background: var(--info-bg); }
+
+  @keyframes flash {
+    0%,100% { opacity:1; }
+    50%      { opacity:.6; }
+  }
+
+  .estado-icon {
+    font-size: 2.6rem;
+    line-height: 1;
+  }
+  .estado-text {
+    font-family: var(--mono);
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .estado-badge.normal    .estado-text { color: var(--normal); }
+  .estado-badge.monitoreo .estado-text { color: var(--monitor); }
+  .estado-badge.crisis    .estado-text { color: var(--crisis); }
+  .estado-badge.iniciando .estado-text { color: var(--info); }
+
+  .estado-ts {
+    font-family: var(--mono);
+    font-size: .7rem;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  /* Info rows */
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: .88rem;
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-row .label { color: var(--muted); }
+  .info-row .value { font-family: var(--mono); font-size: .82rem; color: var(--text); }
+  .info-row .value.accent { color: var(--info); }
+
+  /* ── TOP METRICS ── */
+  .metrics-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: border-color .3s;
+  }
+  .metric-card:hover { border-color: var(--info); }
+  .metric-value {
+    font-family: var(--mono);
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .metric-label {
+    font-size: .8rem;
+    color: var(--muted);
+  }
+  .metric-card .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--mono);
+    font-size: .65rem;
+    padding: 3px 8px;
+    border-radius: 20px;
+    width: fit-content;
+  }
+  .chip.alerta  { background: var(--crisis-bg);  color: var(--crisis);  border: 1px solid var(--crisis); }
+  .chip.evento  { background: var(--info-bg);    color: var(--info);    border: 1px solid var(--info); }
+  .chip.estado  { background: var(--normal-bg);  color: var(--normal);  border: 1px solid var(--normal); }
+
+  /* ── LOG TABLE ── */
+  .log-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow: hidden;
+  }
+  .log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .log-title {
+    font-family: var(--mono);
+    font-size: .85rem;
+    color: var(--text);
+    letter-spacing: .05em;
+  }
+  .btn-clear {
+    font-family: var(--mono);
+    font-size: .7rem;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .btn-clear:hover { border-color: var(--crisis); color: var(--crisis); }
+
+  .log-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+    max-height: 420px;
+    padding-right: 4px;
+  }
+  .log-list::-webkit-scrollbar { width: 4px; }
+  .log-list::-webkit-scrollbar-track { background: var(--surface2); }
+  .log-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .log-entry {
+    display: grid;
+    grid-template-columns: 80px 90px 1fr;
+    gap: 10px;
+    align-items: start;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: var(--surface2);
+    border-left: 3px solid transparent;
+    font-size: .82rem;
+    animation: slideIn .25s ease;
+  }
+  @keyframes slideIn {
+    from { opacity:0; transform:translateY(-6px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+  .log-entry.alerta  { border-left-color: var(--crisis); }
+  .log-entry.evento  { border-left-color: var(--info); }
+  .log-entry.estado  { border-left-color: var(--normal); }
+  .log-entry.estado.crisis   { border-left-color: var(--crisis); }
+  .log-entry.estado.monitoreo{ border-left-color: var(--monitor); }
+
+  .log-time {
+    font-family: var(--mono);
+    font-size: .7rem;
+    color: var(--muted);
+    padding-top: 2px;
+  }
+  .log-type-badge {
+    font-family: var(--mono);
+    font-size: .65rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-align: center;
+    align-self: start;
+  }
+  .log-entry.alerta  .log-type-badge { background: var(--crisis-bg);  color: var(--crisis); }
+  .log-entry.evento  .log-type-badge { background: var(--info-bg);    color: var(--info); }
+  .log-entry.estado  .log-type-badge { background: var(--normal-bg);  color: var(--normal); }
+  .log-entry.estado.crisis    .log-type-badge { background: var(--crisis-bg); color: var(--crisis); }
+  .log-entry.estado.monitoreo .log-type-badge { background: var(--monitor-bg); color: var(--monitor); }
+
+  .log-content {
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .log-content .field {
+    color: var(--muted);
+    font-size: .78rem;
+  }
+  .log-content .val {
+    font-family: var(--mono);
+    font-size: .78rem;
+    color: var(--text);
+  }
+  .log-content .val.crisis   { color: var(--crisis); font-weight:700; }
+  .log-content .val.monitor  { color: var(--monitor); }
+  .log-content .val.normal   { color: var(--normal); }
+  .log-content .val.info     { color: var(--info); }
+
+  /* ── Último evento detalle ── */
+  .evento-detail {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .ev-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .ev-label { font-size: .72rem; color: var(--muted); }
+  .ev-value { font-family: var(--mono); font-size: .85rem; color: var(--info); }
+  .ev-value.big {
+    font-size: 1.4rem;
+    color: var(--crisis);
+    grid-column: span 2;
+  }
+
+  /* ── JSON RAW ── */
+  .raw-json {
+    background: #070d1a;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-family: var(--mono);
+    font-size: .72rem;
+    color: #7dd3fc;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 130px;
+    overflow-y: auto;
+    line-height: 1.6;
+  }
+  .raw-json::-webkit-scrollbar { width: 3px; }
+  .raw-json::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--muted);
+    font-size: .85rem;
+    font-family: var(--mono);
+  }
+  .empty-state span { display: block; font-size: 2rem; margin-bottom: 10px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    main {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto;
+      padding: 16px;
+    }
+    .status-card { grid-row: auto; }
+    .metrics-row { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    EpiWatch
+  </div>
+  <div class="conn-status disconnected" id="connStatus">
+    <div class="conn-dot"></div>
+    <span id="connText">Desconectado</span>
+  </div>
+</header>
+
+<main>
+  <!-- ── COLUMNA IZQUIERDA: Estado del dispositivo ── -->
+  <div class="status-card">
+    <div>
+      <div class="section-label">Estado del dispositivo</div>
+      <div class="estado-badge" id="estadoBadge">
+        <div class="estado-icon" id="estadoIcon">⚪</div>
+        <div class="estado-text" id="estadoText">ESPERANDO</div>
+        <div class="estado-ts" id="estadoTs">—</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Dispositivo</div>
+      <div class="info-row">
+        <span class="label">ID</span>
+        <span class="value accent" id="devId">—</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Último mensaje</span>
+        <span class="value" id="lastMsg">—</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Topic activo</span>
+        <span class="value" id="lastTopic">—</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Último evento</div>
+      <div class="evento-detail" id="eventoDetail">
+        <div style="grid-column:span 2; text-align:center; color:var(--muted); font-size:.8rem; font-family:var(--mono);">
+          Ningún evento registrado aún
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Último JSON recibido</div>
+      <div class="raw-json" id="rawJson">Esperando mensajes...</div>
+    </div>
+  </div>
+
+  <!-- ── COLUMNA DERECHA ARRIBA: Métricas ── -->
+  <div class="metrics-row">
+    <div class="metric-card">
+      <div class="chip alerta">🚨 alertas</div>
+      <div class="metric-value" id="cntAlertas">0</div>
+      <div class="metric-label">Total de alertas recibidas</div>
+    </div>
+    <div class="metric-card">
+      <div class="chip evento">📋 eventos</div>
+      <div class="metric-value" id="cntEventos">0</div>
+      <div class="metric-label">Eventos registrados</div>
+    </div>
+    <div class="metric-card">
+      <div class="chip estado">📡 estados</div>
+      <div class="metric-value" id="cntEstados">0</div>
+      <div class="metric-label">Cambios de estado</div>
+    </div>
+  </div>
+
+  <!-- ── COLUMNA DERECHA ABAJO: Log ── -->
+  <div class="log-card">
+    <div class="log-header">
+      <div class="log-title">// LOG DE MENSAJES MQTT</div>
+      <button class="btn-clear" onclick="clearLog()">Limpiar</button>
+    </div>
+    <div class="log-list" id="logList">
+      <div class="empty-state">
+        <span>📡</span>
+        Esperando conexión al broker MQTT...
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ===== CONFIGURACIÓN =====
+const BROKER_WS  = "wss://broker.hivemq.com:8884/mqtt"; // WebSocket seguro
+const TOPIC_ESTADO = "epilepsia/estado";
+const TOPIC_ALERTA = "epilepsia/alerta";
+const TOPIC_EVENTO = "epilepsia/evento";
+
+// ===== CONTADORES =====
+let cntAlertas = 0, cntEventos = 0, cntEstados = 0;
+
+// ===== CONEXIÓN MQTT =====
+let client;
+
+function connect() {
+  client = mqtt.connect(BROKER_WS, {
+    clientId: "dashboard_" + Math.random().toString(16).substr(2, 8),
+    clean: true,
+    reconnectPeriod: 3000,
+  });
+
+  client.on("connect", () => {
+    setConnStatus(true);
+    client.subscribe([TOPIC_ESTADO, TOPIC_ALERTA, TOPIC_EVENTO], err => {
+      if (!err) addLogEntry("sistema", null, "Suscripto a epilepsia/estado, alerta, evento");
+    });
+  });
+
+  client.on("disconnect", () => setConnStatus(false));
+  client.on("error",      () => setConnStatus(false));
+  client.on("offline",    () => setConnStatus(false));
+
+  client.on("message", (topic, payload) => {
+    const raw = payload.toString();
+    let data = null;
+    try { data = JSON.parse(raw); } catch(e) {
+      // mensaje antiguo no-JSON → ignorar o mostrar como texto
+      addLogEntry("sistema", topic, "Mensaje no-JSON: " + raw);
+      return;
+    }
+    handleMessage(topic, data, raw);
+  });
+}
+
+// ===== MANEJO DE MENSAJES =====
+function handleMessage(topic, data, raw) {
+  // Actualizar UI genérica
+  document.getElementById("lastMsg").textContent   = formatTs(new Date());
+  document.getElementById("lastTopic").textContent = topic;
+  document.getElementById("rawJson").textContent   = JSON.stringify(data, null, 2);
+
+  if (data.id_dispositivo) {
+    document.getElementById("devId").textContent = data.id_dispositivo;
+  }
+
+  switch(data.tipo_mensaje) {
+    case "estado":  handleEstado(data, raw);  break;
+    case "alerta":  handleAlerta(data, raw);  break;
+    case "evento":  handleEvento(data, raw);  break;
+    default:
+      addLogEntry("sistema", topic, "Tipo desconocido: " + data.tipo_mensaje);
+  }
+}
+
+function handleEstado(data, raw) {
+  cntEstados++;
+  document.getElementById("cntEstados").textContent = cntEstados;
+
+  const estado = data.estado_actual;
+  const badge  = document.getElementById("estadoBadge");
+  const icon   = document.getElementById("estadoIcon");
+  const text   = document.getElementById("estadoText");
+  const ts     = document.getElementById("estadoTs");
+
+  badge.className = "estado-badge " + estado;
+  text.textContent = estado.toUpperCase();
+  ts.textContent   = data.timestamp || "—";
+
+  const icons = { normal:"✅", monitoreo:"🟡", crisis:"🚨", iniciando:"🔵" };
+  icon.textContent = icons[estado] || "⚪";
+
+  // Log
+  const html = `<span class="field">estado →</span> <span class="val ${estado}">${estado}</span>  <span class="field">ts:</span> <span class="val">${data.timestamp}</span>`;
+  addLogEntry("estado " + estado, TOPIC_ESTADO, html);
+}
+
+function handleAlerta(data, raw) {
+  cntAlertas++;
+  document.getElementById("cntAlertas").textContent = cntAlertas;
+
+  const html = `<span class="val crisis">⚠ CRISIS DETECTADA</span><br>
+    <span class="field">dispositivo:</span> <span class="val info">${data.id_dispositivo}</span>
+    <span class="field">  ts:</span> <span class="val">${data.timestamp}</span>`;
+  addLogEntry("alerta", TOPIC_ALERTA, html);
+}
+
+function handleEvento(data, raw) {
+  cntEventos++;
+  document.getElementById("cntEventos").textContent = cntEventos;
+
+  // Actualizar panel de último evento
+  document.getElementById("eventoDetail").innerHTML = `
+    <div class="ev-field" style="grid-column:span 2">
+      <div class="ev-label">Duración</div>
+      <div class="ev-value big">${data.duracion_segundos}s</div>
+    </div>
+    <div class="ev-field">
+      <div class="ev-label">Inicio</div>
+      <div class="ev-value">${data.inicio_evento}</div>
+    </div>
+    <div class="ev-field">
+      <div class="ev-label">Fin</div>
+      <div class="ev-value">${data.fin_evento}</div>
+    </div>
+    <div class="ev-field">
+      <div class="ev-label">RMS</div>
+      <div class="ev-value">${parseFloat(data.rms).toFixed(4)}</div>
+    </div>
+    <div class="ev-field">
+      <div class="ev-label">Picos</div>
+      <div class="ev-value">${data.cantidad_picos}</div>
+    </div>
+  `;
+
+  const html = `<span class="val info">📋 EVENTO REGISTRADO</span><br>
+    <span class="field">inicio:</span> <span class="val">${data.inicio_evento}</span><br>
+    <span class="field">fin:</span> <span class="val">${data.fin_evento}</span>  
+    <span class="field">duración:</span> <span class="val crisis">${data.duracion_segundos}s</span><br>
+    <span class="field">RMS:</span> <span class="val">${parseFloat(data.rms).toFixed(4)}</span>  
+    <span class="field">picos:</span> <span class="val">${data.cantidad_picos}</span>`;
+  addLogEntry("evento", TOPIC_EVENTO, html);
+}
+
+// ===== UI HELPERS =====
+function setConnStatus(connected) {
+  const el   = document.getElementById("connStatus");
+  const text = document.getElementById("connText");
+  el.className   = "conn-status " + (connected ? "connected" : "disconnected");
+  text.textContent = connected ? "Conectado" : "Desconectado";
+}
+
+let logCount = 0;
+function addLogEntry(type, topic, contentHtml) {
+  const list = document.getElementById("logList");
+
+  // Quitar placeholder
+  const empty = list.querySelector(".empty-state");
+  if (empty) empty.remove();
+
+  const entry = document.createElement("div");
+  // Determinar clase base
+  let cls = "log-entry";
+  if (type.startsWith("estado")) cls += " estado " + type.replace("estado ", "").trim();
+  else if (type === "alerta")    cls += " alerta";
+  else if (type === "evento")    cls += " evento";
+  else cls += " estado";
+
+  const badge = type === "alerta" ? "ALERTA" :
+                type === "evento" ? "EVENTO" :
+                type.startsWith("estado") ? "ESTADO" : "SYS";
+
+  entry.className = cls;
+  entry.innerHTML = `
+    <div class="log-time">${formatTs(new Date())}</div>
+    <div class="log-type-badge">${badge}</div>
+    <div class="log-content">${contentHtml}</div>
+  `;
+
+  list.insertBefore(entry, list.firstChild);
+  logCount++;
+  // Limitar a 100 entradas
+  while (list.children.length > 100) list.removeChild(list.lastChild);
+}
+
+function clearLog() {
+  document.getElementById("logList").innerHTML =
+    '<div class="empty-state"><span>🗑</span>Log limpiado</div>';
+  logCount = 0;
+}
+
+function formatTs(d) {
+  return d.toTimeString().split(" ")[0];
+}
+
+// ===== INIT =====
+connect();
+</script>
+</body>
+</html>
