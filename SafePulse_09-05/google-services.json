@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "85261584318",
+    "project_id": "tesis-2da9d",
+    "storage_bucket": "tesis-2da9d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:85261584318:android:3abea65d5a323e719a9bef",
+        "android_client_info": {
+          "package_name": "com.cid.safepulse"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyALENfdqrRfft-vXnCz3nmh3kvSUayj-4I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

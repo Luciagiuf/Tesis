@@ -1,0 +1,19 @@
+⚠️  PASO REQUERIDO: Agregar archivo de audio de alarma
+======================================================
+
+Debés colocar en esta carpeta un archivo llamado exactamente:
+
+    alarm.mp3
+
+Fuentes gratuitas para descargar:
+- https://freesound.org/search/?q=alarm
+- https://pixabay.com/sound-effects/search/alarm/
+
+Características recomendadas:
+- Duración: 2-5 segundos (se repite en loop)
+- Formato: MP3
+- Volumen: alto, sin fade-in
+- Tipo: alarma, beep, o timbre fuerte
+
+Una vez que tengas el archivo, renombralo a "alarm.mp3"
+y colocalo en esta misma carpeta (assets/).

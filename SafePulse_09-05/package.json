@@ -1,0 +1,38 @@
+{
+  "name": "safepulse-functions",
+  "description": "Cloud Functions para SafePulse",
+  "scripts": {
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "@react-navigation/native": "^7.2.3",
+    "@react-navigation/native-stack": "^7.14.13",
+    "@taoqf/react-native-mqtt": "^3.0.4",
+    "expo": "^55.0.23",
+    "expo-av": "~16.0.8",
+    "expo-dev-client": "~55.0.32",
+    "expo-device": "~55.0.16",
+    "expo-haptics": "~55.0.14",
+    "expo-notifications": "~55.0.22",
+    "firebase": "^12.13.0",
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^5.0.0",
+    "react": "19.2.0",
+    "react-native": "0.83.6",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.23.0"
+  },
+  "devDependencies": {
+    "babel-preset-expo": "^55.0.21",
+    "firebase-functions-test": "^3.1.0"
+  },
+  "private": true
+}
